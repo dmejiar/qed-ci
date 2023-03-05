@@ -335,6 +335,8 @@ def cs_cqed_cis(lambda_vector, omega_val, molecule_string, psi4_options_dict):
 
 
     cqed_cis_dict = {
+        "G MATRIX" : G,
+        "g VECTOR" : g,
         "H CIS-DSE": H_CIS_DSE,
         "H CISS-DSE" : H_CISS_DSE,
         "H CISS-BLC" : H_CISS_BLC,

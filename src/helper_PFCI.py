@@ -569,6 +569,7 @@ class PFHamiltonianGenerator:
         spinObtList = det.getOrbitalMixedIndexList()
         Helem = 0.0
         for m in spinObtList:
+            print(F"adding <{m}|{m} with value {self.Hspin[m,n]}")
             Helem += self.Hspin[m, m]
         length = len(spinObtList)
         Relem = 0.0

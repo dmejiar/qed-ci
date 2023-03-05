@@ -79,55 +79,27 @@ symmetry c1
 psi4.set_options(options_dict)
 mol = psi4.geometry(mol_str)
 
-om_1 = 0.00
+om_1 = 4.75
 lam_1 = np.array([0.0, 0.0, 0.0])
 
 om_2 = 4.75 / psi4.constants.Hartree_energy_in_eV 
-#lam_2 = np.array([0.0, 0.0, 0.0125])
-lam_2 = np.array([0.1, 0.1, 0.1])
-
-om_3 = 4.75 / psi4.constants.Hartree_energy_in_eV - 0.22j
-lam_3 = np.array([0.0, 0.0, 0.0125])
-
-
-n_states = 5
-
-# run psi4 SCF
-#psi4_rhf_e, wfn = psi4.energy("scf/cc-pVDZ", return_wfn=True, molecule=mol)
-psi4_rhf_e, wfn = psi4.energy("scf/sto-3g", return_wfn=True, molecule=mol)
-# calculate the excited-state energies and save them to a dictionary called 'res'
-#res = tdscf_excitations(wfn, states=n_states, triplets="NONE", tda=True)
-
-# parse res for excitation energies
-#psi4_excitation_e = [r["EXCITATION ENERGY"] for r in res]
+lam_2 = np.array([0.01, 0.01, 0.0125])
+#lam_2 = np.array([0.1, 0.1, 0.1])
 
 # run cs_cqed_cis() for the three cases
 cqed_cis_1 = cs_cqed_cis(lam_1, om_1, mol_str, options_dict)
 cqed_cis_2 = cs_cqed_cis(lam_2, om_2, mol_str, options_dict)
-cqed_cis_3 = cs_cqed_cis(lam_3, om_3, mol_str, options_dict)
+
 
 cqed_cis_e_1 = cqed_cis_1["CISS-PF ENERGY"]
 scf_e_1 = cqed_cis_1["CQED-RHF ENERGY"]
 
 cqed_cis_e_2 = cqed_cis_2["CISS-PF ENERGY"]
-scf_e_2 = cqed_cis_2["CQED-RHF ENERGY"]
+scf_e_2 = cqed_cis_1["CQED-RHF ENERGY"]
 
-cqed_cis_e_3 = cqed_cis_3["CISS-PF ENERGY"]
-scf_e_3 = cqed_cis_3["CQED-RHF ENERGY"]
 
-# collect every other excitation energy for case 1 since cqed-cis will be doubly
-# degenerate when omega = 0 and lambda = 0,0,0
-cqed_cis_e_1 = cqed_cis_e_1[::2]
-
-print("\n    PRINTING RESULTS FOR CASE 1: NO COUPLING")
-print("\n    CASE 1 RHF Energy (Hatree):                    %.8f" % psi4_rhf_e)
-print("    CASE 1 CQED-RHF Energy (Hartree):              %.8f" % scf_e_1)
-#print(
-#    "    CASE 1 CIS LOWEST EXCITATION ENERGY (eV)        %.8f"
-#    % (psi4_excitation_e[0] * psi4.constants.Hartree_energy_in_eV)
-#)
 print(
-    "    CASE 1 CQED-CIS LOWEST EXCITATION ENERGY (eV)   %.8f"
+    "    CASE 1 CQED-CIS LOWEST EXCITATION ENERGY (eV)   %.4f"
     % (np.real(cqed_cis_e_1[1]) * psi4.constants.Hartree_energy_in_eV)
 )
 
@@ -135,12 +107,8 @@ print(
     "\n    PRINTING RESULTS FOR CASE 2: HBAR * OMEGA = 4.75 eV, LAMBDA = (0, 0, 0.0125) A.U."
 )
 
-print(
-    "\n    CQED-RHF ENERGY:  %.8f" % scf_e_2)
-print(
-    "\n    CORRELATION:", np.real(cqed_cis_e_2[0]) * psi4.constants.Hartree_energy_in_eV)
-print(
-    "\n    CQED-CIS |G> (Hartrees)  %.8f" % (scf_e_2 + np.real(cqed_cis_e_2[0]))) 
+print("CORRELATION:", np.real(cqed_cis_e_2[0]) * psi4.constants.Hartree_energy_in_eV)
+print("|G> (Hartrees)  %.8f" % (scf_e_2 + np.real(cqed_cis_e_2[0]))) 
 print(
     "\n    CASE 2 |X,0> -> |LP> Energy (eV)                %.8f"
     % (np.real(cqed_cis_e_2[1]) * psi4.constants.Hartree_energy_in_eV)
@@ -150,20 +118,7 @@ print(
     % (np.real(cqed_cis_e_2[2]) * psi4.constants.Hartree_energy_in_eV)
 )
 
-print(
-    "\n    PRINTING RESULTS FOR CASE 3: HBAR * OMEGA = (4.75 - 0.22i) eV, LAMBDA = (0, 0, 0.0125) A.U."
-)
-print(
-    "\n    CASE 3 |X,0> -> |LP> Energy (eV)                %.4f"
-    % (np.real(cqed_cis_e_3[1]) * psi4.constants.Hartree_energy_in_eV)
-)
-print(
-    "    CASE 3 |X,0> -> |UP> Energy (eV)                %.4f\n"
-    % (np.real(cqed_cis_e_3[2]) * psi4.constants.Hartree_energy_in_eV)
-)
 
-g = cqed_cis_2["g VECTOR"]
-print(np.real(g))
 # check to see that the CQED-RHF energy matches ordinary RHF energy for case 1
 ###psi4.compare_values(psi4_rhf_e, scf_e_1, 8, "CASE 1 SCF E")
 
