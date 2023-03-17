@@ -163,12 +163,12 @@ def cs_cqed_cis(lambda_vector, omega_val, molecule_string, psi4_options_dict):
     assert np.isclose(d_c, cqed_rhf_dict["DIPOLE ENERGY (1/2 (\lambda \cdot <\mu>_e)^2)"])
 
     # create Hamiltonian for elements H[ias, jbt]
-    Htot = np.zeros((ndocc * nvirt * 2 + 2, ndocc * nvirt * 2 + 2), dtype=complex)
-    Hep = np.zeros((ndocc * nvirt * 2 + 2, ndocc * nvirt * 2 + 2), dtype=complex)
-    H1e = np.zeros((ndocc * nvirt * 2 + 2, ndocc * nvirt * 2 + 2), dtype=complex)
-    H2e = np.zeros((ndocc * nvirt * 2 + 2, ndocc * nvirt * 2 + 2), dtype=complex)
-    H2edp = np.zeros((ndocc * nvirt * 2 + 2, ndocc * nvirt * 2 + 2), dtype=complex)
-    Hp = np.zeros((ndocc * nvirt * 2 + 2, ndocc * nvirt * 2 + 2), dtype=complex)
+    Htot = np.zeros((ndocc * nvirt * 2 + 2, ndocc * nvirt * 2 + 2))
+    Hep = np.zeros((ndocc * nvirt * 2 + 2, ndocc * nvirt * 2 + 2))
+    H1e = np.zeros((ndocc * nvirt * 2 + 2, ndocc * nvirt * 2 + 2))
+    H2e = np.zeros((ndocc * nvirt * 2 + 2, ndocc * nvirt * 2 + 2))
+    H2edp = np.zeros((ndocc * nvirt * 2 + 2, ndocc * nvirt * 2 + 2))
+    Hp = np.zeros((ndocc * nvirt * 2 + 2, ndocc * nvirt * 2 + 2))
 
     # elements corresponding to <s|<\Phi_0 | H | \Phi_0>|t>
     # Eq. (16) of [McTague:2021:ChemRxiv]
@@ -255,17 +255,8 @@ def cs_cqed_cis(lambda_vector, omega_val, molecule_string, psi4_options_dict):
     # Form Htot from sum of all terms
     Htot = Hp + Hep + H1e + H2e + H2edp
     # now diagonalize H
-    # use eigh if Hermitian
-    if np.isclose(np.imag(omega_val), 0, 1e-6):
-        ECIS, CCIS = np.linalg.eigh(Htot)
-    # use eig if not-Hermitian.  Note that
-    # numpy eig just returns the left eigenvectors
-    # and does not sort the eigenvalues
-    else:
-        ECIS, CCIS = np.linalg.eig(Htot)
-        idx = ECIS.argsort()
-        ECIS = ECIS[idx]
-        CCIS = CCIS[:, idx]
+    ECIS, CCIS = np.linalg.eigh(Htot)
+
 
     cqed_cis_dict = {
         "RHF ENERGY": scf_e,

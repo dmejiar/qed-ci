@@ -571,6 +571,7 @@ class PFHamiltonianGenerator:
         lambda_vector,
         omega_val,
         ignore_coupling=False,
+        ci_level="cis"
     ):
         """
         Constructor for matrix elements of the PF Hamiltonian
@@ -588,15 +589,21 @@ class PFHamiltonianGenerator:
         p4_wfn = self.parseArrays(cqed_rhf_dict)
 
         # run cqed-cis to get CIS vectors
-        cqed_cis_dict = cs_cqed_cis(lambda_vector, omega_val, molecule_string, psi4_options_dict)
-        _c_vecs = cqed_cis_dict["CQED-CIS L VECTORS"]
+        #cqed_cis_dict = cs_cqed_cis(lambda_vector, omega_val, molecule_string, psi4_options_dict)
+        #_c_vecs = cqed_cis_dict["CQED-CIS L VECTORS"]
 
         # pass in cqed-cis vector for desired CIS state to get the corresponding 1RDM
-        RDM1 = self.calc1RDM(_c_vecs[:,0])
-        print(" Printing 1RDM")
-        print(RDM1)
+        #RDM1 = self.calc1RDM(_c_vecs[:,0])
+        #print(" Printing 1RDM")
+        #print(RDM1)
 
-        print(" TRACE OF 1RDM IS ", np.trace(RDM1))
+        #print(" TRACE OF 1RDM IS ", np.trace(RDM1))
+
+        #RDM1b = self.calc1RDM_b(_c_vecs[:,0])
+        #print(" Printing 1RDM b")
+        #print(RDM1b)
+
+        #print(" TRACE OF 1RDMb is ",np.trace(RDM1b))
 
         # build 1H in spin orbital basis
         self.build1HSO()
@@ -612,13 +619,15 @@ class PFHamiltonianGenerator:
         self.buildGSO()
 
         # build the determinant list
-        self.generateDeterminants(psi4_options_dict)
+        self.generateDeterminants(ci_level)
 
         # build Constant matrices
         self.buildConstantMatrices()
 
         # Build Matrix
         self.generatePFHMatrix()
+
+
 
     def parseArrays(self, cqed_rhf_dict):
         # grab quantities from cqed_rhf_dict
@@ -722,20 +731,33 @@ class PFHamiltonianGenerator:
             self.Omega_so *= 0
             self.dc_so *= 0
 
-    def generateDeterminants(self, options_dict):
+    def generateDeterminants(self, ci_level):
         """
         Generates the determinant list for building the CI matrix
         """
+
         self.dets = []
         self.numDets = 0
-        for alpha in combinations(range(self.nmo), self.ndocc):
-            alpha_ex_level = compute_excitation_level(alpha, self.ndocc)
-            for beta in combinations(range(self.nmo), self.ndocc):
-                beta_ex_level = compute_excitation_level(beta, self.ndocc)
-                if alpha_ex_level + beta_ex_level <= 1:
-                    # print(F' adding alpha: {alpha} and beta: {beta}\n')
+
+        if ci_level == "cis":
+            occList = [i for i in range(self.ndocc)]
+            det_ref = Determinant(alphaObtList=occList, betaObtList=occList)
+            detList = det_ref.generateSingleExcitationsOfDet(self.nmo)
+            self.dets.append(det_ref)
+            for _j in range(len(detList)):
+                self.dets.append(detList[_j])
+            self.numDets = len(self.dets)
+
+
+        if ci_level == "fci":
+            for alpha in combinations(range(self.nmo), self.ndocc):
+                for beta in combinations(range(self.nmo), self.ndocc):
                     self.dets.append(Determinant(alphaObtList=alpha, betaObtList=beta))
                     self.numDets += 1
+
+        print(F"Generated {self.numDets} Determinats for {ci_level}")
+        for i in range(self.numDets):
+            print(self.dets[i])
 
     def generatePFHMatrix(self):
         """
@@ -971,7 +993,7 @@ class PFHamiltonianGenerator:
         _D1 = _D1_RR + _D1_RS + _D1_SS
         return _D1
     
-    def calc1RDM_b(self, c_vec):
+    def calc1RDM_b(self, c_vec_n):
         """
         Calculate the 1RDM from a QED-CIS calculation
 
@@ -1016,20 +1038,21 @@ class PFHamiltonianGenerator:
 
 
         excitations = []
-        C0_ia = np.zeros((_ndocc, _nvirt))
-        C1_ia = np.zeros((_ndocc, _nvirt))
+        C0_ia = np.zeros((_nmo, _nmo))
+        C1_ia = np.zeros((_nmo, _nmo))
         _idx = 1
         for _i in range(_ndocc):
-            _xi[i] = 1
+            _xi[_i] = 1
             for _a in range(_nvirt):
                 _A = _a + _ndocc
                 _pi[_A] = 1
                 excitations.append((_i, _A))
                 C0_ia[_i, _A] = c_n0[_idx]
                 C1_ia[_i, _A] = c_n1[_idx]
+                _idx += 1
 
 
-        _D1 = np.zeros(_nmo, _nmo)
+        _D1 = np.zeros((_nmo, _nmo))
         for _i in range(_ndocc):
             _D1[_i, _i] = c_n0[0] * c_n0[0] + c_n1[0] * c_n1[0]
         
