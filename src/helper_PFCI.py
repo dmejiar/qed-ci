@@ -828,12 +828,14 @@ class PFHamiltonianGenerator:
         else:
             return 0.0
         
-    def calc1RDMElement(self, p, q, bra_idx, ket_idx, block="alpha"):
+    def calc1RDMElement(self, C, p, q, bra_idx, ket_idx, block="alpha"):
         """
         calculate c_1^* c_2 <bra|p^{\dagger}q|ket>
 
         Argument
         --------
+        C : numpy array
+            the CIS vector 
         p : int 
             mo index
         q : int
@@ -843,14 +845,82 @@ class PFHamiltonianGenerator:
         ket_idx : int
             index of ket determinant
         """
-        # get the occupied orbitals in det2
-        a, b = self.dets[ket_idx].getOrbitalIndexLists()
+        n_el_dets = len(self.dets)
+
+        # get coefficients for the appropriate bra/ket states
+        C0_bra = C[bra_idx]
+        C1_bra = C[bra_idx + n_el_dets]
+
+        C0_ket = C[ket_idx]
+        C1_ket = C[ket_idx + n_el_dets]
+
+        # make copy of the ket determinant
+        ket_copy = self.dets[ket_idx].copy()
+        a, b = ket_copy.getOrbitalIndexLists()
+        
+        # assume the element is non-zero
+        zero=False
+        
+        # alpha block
         if block=="alpha":
-            # check to see if q is occupied in the alpha list
-            if (q in a):
-                self.dets[ket_idx].re
-        print("just got occupation list of determinants")
-        print(a, b)
+            # check to see if q is unoccupied in the alpha list
+            if (q not in a):
+                zero = True
+                
+            else:
+                # kill q
+                ket_copy.removeAlphaOrbital(q)
+                print("removed orbital", q)
+                print("ket_copy",ket_copy)
+                print("original",self.dets[ket_idx])
+                # get new occupation list
+                a, b = ket_copy.getOrbitalIndexLists()
+
+            # check to see if p is occupied in the alpha list
+            if (p in a):
+                zero = True
+                
+            else:
+                # create p
+                ket_copy.addAlphaOrbital(p)
+                print("added orbital", p)
+                print("ket_copy",ket_copy)
+                print("original",self.dets[ket_idx])
+
+        # beta block
+        elif block=="beta":
+            # check to see if q is unoccupied in the alpha list
+            if (q not in b):
+                zero = True
+                
+            else:
+                # kill q
+                ket_copy.removeBetaOrbital(q)
+                print("removed orbital", q)
+                print("ket_copy",ket_copy)
+                print("original",self.dets[ket_idx])
+                # get new occupation list
+                a, b = ket_copy.getOrbitalIndexLists()
+
+            # check to see if p is occupied in the alpha list
+            if (p in b):
+                zero = True
+                
+            else:
+                # create p
+                ket_copy.addBetaOrbital(p)
+                print("added orbital", p)
+                print("ket_copy",ket_copy)
+                print("original",self.dets[ket_idx])   
+
+        numUniqueOrbitals = self.dets[bra_idx].numberOfTotalDiffOrbitals(ket_copy)
+
+        if numUniqueOrbitals==0 and zero==False:
+            element = np.conj(C0_bra) * C0_ket + np.conj(C1_bra) * C1_ket
+        else:
+            element = 0
+        return element
+
 
 
 
