@@ -589,21 +589,21 @@ class PFHamiltonianGenerator:
         p4_wfn = self.parseArrays(cqed_rhf_dict)
 
         # run cqed-cis to get CIS vectors
-        #cqed_cis_dict = cs_cqed_cis(lambda_vector, omega_val, molecule_string, psi4_options_dict)
-        #_c_vecs = cqed_cis_dict["CQED-CIS L VECTORS"]
+        cqed_cis_dict = cs_cqed_cis(lambda_vector, omega_val, molecule_string, psi4_options_dict)
+        _c_vecs = cqed_cis_dict["CQED-CIS L VECTORS"]
 
         # pass in cqed-cis vector for desired CIS state to get the corresponding 1RDM
-        #RDM1 = self.calc1RDM(_c_vecs[:,0])
-        #print(" Printing 1RDM")
-        #print(RDM1)
+        RDM1 = self.calc1RDM(_c_vecs[:,2])
+        print(" Printing 1RDM")
+        print(RDM1)
 
-        #print(" TRACE OF 1RDM IS ", np.trace(RDM1))
+        print(" TRACE OF 1RDM IS ", np.trace(RDM1))
 
-        #RDM1b = self.calc1RDM_b(_c_vecs[:,0])
-        #print(" Printing 1RDM b")
-        #print(RDM1b)
+        RDM1b = self.calc1RDM_b(_c_vecs[:,2])
+        print(" Printing 1RDM b")
+        print(RDM1b)
 
-        #print(" TRACE OF 1RDMb is ",np.trace(RDM1b))
+        print(" TRACE OF 1RDMb is ",np.trace(RDM1b))
 
         # build 1H in spin orbital basis
         self.build1HSO()
@@ -620,6 +620,7 @@ class PFHamiltonianGenerator:
 
         # build the determinant list
         self.generateDeterminants(ci_level)
+        self.calc1RDMElement(0, 0, 0, 0, block="alpha")
 
         # build Constant matrices
         self.buildConstantMatrices()
@@ -826,6 +827,32 @@ class PFHamiltonianGenerator:
                 return 0.0
         else:
             return 0.0
+        
+    def calc1RDMElement(self, p, q, bra_idx, ket_idx, block="alpha"):
+        """
+        calculate c_1^* c_2 <bra|p^{\dagger}q|ket>
+
+        Argument
+        --------
+        p : int 
+            mo index
+        q : int
+            mo index
+        bra_idx : int
+            index of bra determinant
+        ket_idx : int
+            index of ket determinant
+        """
+        # get the occupied orbitals in det2
+        a, b = self.dets[ket_idx].getOrbitalIndexLists()
+        if block=="alpha":
+            # check to see if q is occupied in the alpha list
+            if (q in a):
+                self.dets[ket_idx].re
+        print("just got occupation list of determinants")
+        print(a, b)
+
+
 
     def calcMatrixElementDiffIn2(self, det1, det2):
         """
@@ -893,7 +920,8 @@ class PFHamiltonianGenerator:
 
     def calc1RDM(self, c_vec_n):
         """
-        Calculate the 1RDM from a QED-CIS calculation
+        Calculate the 1RDM from a QED-CIS calculation using these notes:
+
 
         Arguments
         ---------
@@ -901,9 +929,6 @@ class PFHamiltonianGenerator:
         """
 
         # need to reshape c_vec_n so we can make a column and row vector out of it
-        # 𝛾𝑝𝑞=𝛿𝑝𝑞 𝜒(𝑝)+𝑐^𝑝_𝑞(𝜋(𝑝)𝜒(𝑞)+𝜒(𝑝)𝜋(𝑞))+∑_i c_i^p c_q^i 𝜋(𝑝)𝜋(𝑞)−∑_a c_q^a c_a^p 𝜒(𝑝)𝜒(q)
-        # 𝜒(𝑝) and 𝜋(𝑝)= 1 when p belongs to occupied / unoccupied orbitals, respectively
-
         # get some basic quantities first
         _nmo = self.nmo
         _ndocc = self.ndocc
@@ -927,13 +952,6 @@ class PFHamiltonianGenerator:
         c_n0 = c_vec_n[_pvac_idx]
         # CIS coefficients spanning the |R,1> and |R,1> states
         c_n1 = c_vec_n[_pone_idx]
-
-        # now each vector spans the |R> + {|S>} basis for a given photon state.
-        # for the {|S>}, let's generate a list of the excitations in the order
-        # of the |S> basis
-        _pi = np.zeros(_nmo)
-        _xi = np.zeros(_nmo)
-
 
         excitations = []
         for _i in range(_ndocc):
@@ -987,15 +1005,17 @@ class PFHamiltonianGenerator:
                 _D1_SS[_a, _b] += (_D0[_ket_I, _ket_J] + _D1[_ket_I, _ket_J]) * (
                     _i == _j
                 )
-                _D1_SS[_i, _j] += (_D0[_ket_I, _ket_J] + _D1[_ket_I, _ket_J]) * (
-                    _a == _b
-                )
+                #_D1_SS[_i, _j] -= (_D0[_ket_I, _ket_J] + _D1[_ket_I, _ket_J]) * (
+                #    _a == _b
+                #)
         _D1 = _D1_RR + _D1_RS + _D1_SS
         return _D1
     
     def calc1RDM_b(self, c_vec_n):
         """
-        Calculate the 1RDM from a QED-CIS calculation
+        Calculate the 1RDM from a QED-CIS calculation using these notes: 
+        https://chemistry.stackexchange.com/questions/121279/why-are-the-ov-and-vo-blocks-of-the-cis-1rdm-zero
+        Haven't worked through these myself!
 
         Arguments
         ---------
@@ -1054,7 +1074,7 @@ class PFHamiltonianGenerator:
 
         _D1 = np.zeros((_nmo, _nmo))
         for _i in range(_ndocc):
-            _D1[_i, _i] = c_n0[0] * c_n0[0] + c_n1[0] * c_n1[0]
+            _D1[_i, _i] += 1 #c_n0[0] * c_n0[0] + c_n1[0] * c_n1[0]
         
         for _p in range(_nmo):
             for _q in range(_nmo):
