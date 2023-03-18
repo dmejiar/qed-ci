@@ -620,7 +620,7 @@ class PFHamiltonianGenerator:
 
         # build the determinant list
         self.generateDeterminants(ci_level)
-        self.calc1RDMElement(0, 0, 0, 0, block="alpha")
+        #self.calc1RDMElement(0, 0, 0, 0, block="alpha")
 
         # build Constant matrices
         self.buildConstantMatrices()
