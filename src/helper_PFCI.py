@@ -828,101 +828,6 @@ class PFHamiltonianGenerator:
         else:
             return 0.0
         
-    def calc1RDMElement(self, C, p, q, bra_idx, ket_idx, block="alpha"):
-        """
-        calculate c_1^* c_2 <bra|p^{\dagger}q|ket>
-
-        Argument
-        --------
-        C : numpy array
-            the CIS vector 
-        p : int 
-            mo index
-        q : int
-            mo index
-        bra_idx : int
-            index of bra determinant
-        ket_idx : int
-            index of ket determinant
-        """
-        n_el_dets = len(self.dets)
-
-        # get coefficients for the appropriate bra/ket states
-        C0_bra = C[bra_idx]
-        C1_bra = C[bra_idx + n_el_dets]
-
-        C0_ket = C[ket_idx]
-        C1_ket = C[ket_idx + n_el_dets]
-
-        # make copy of the ket determinant
-        ket_copy = self.dets[ket_idx].copy()
-        a, b = ket_copy.getOrbitalIndexLists()
-        
-        # assume the element is non-zero
-        zero=False
-        
-        # alpha block
-        if block=="alpha":
-            # check to see if q is unoccupied in the alpha list
-            if (q not in a):
-                zero = True
-                
-            else:
-                # kill q
-                ket_copy.removeAlphaOrbital(q)
-                print("removed orbital", q)
-                print("ket_copy",ket_copy)
-                print("original",self.dets[ket_idx])
-                # get new occupation list
-                a, b = ket_copy.getOrbitalIndexLists()
-
-            # check to see if p is occupied in the alpha list
-            if (p in a):
-                zero = True
-                
-            else:
-                # create p
-                ket_copy.addAlphaOrbital(p)
-                print("added orbital", p)
-                print("ket_copy",ket_copy)
-                print("original",self.dets[ket_idx])
-
-        # beta block
-        elif block=="beta":
-            # check to see if q is unoccupied in the alpha list
-            if (q not in b):
-                zero = True
-                
-            else:
-                # kill q
-                ket_copy.removeBetaOrbital(q)
-                print("removed orbital", q)
-                print("ket_copy",ket_copy)
-                print("original",self.dets[ket_idx])
-                # get new occupation list
-                a, b = ket_copy.getOrbitalIndexLists()
-
-            # check to see if p is occupied in the alpha list
-            if (p in b):
-                zero = True
-                
-            else:
-                # create p
-                ket_copy.addBetaOrbital(p)
-                print("added orbital", p)
-                print("ket_copy",ket_copy)
-                print("original",self.dets[ket_idx])   
-
-        numUniqueOrbitals = self.dets[bra_idx].numberOfTotalDiffOrbitals(ket_copy)
-
-        if numUniqueOrbitals==0 and zero==False:
-            element = np.conj(C0_bra) * C0_ket + np.conj(C1_bra) * C1_ket
-        else:
-            element = 0
-        return element
-
-
-
 
     def calcMatrixElementDiffIn2(self, det1, det2):
         """
@@ -988,178 +893,126 @@ class PFHamiltonianGenerator:
                 ]
         return Helem + Relem
 
-    def calc1RDM(self, c_vec_n):
+    def calc1RDMElement( C, p_so, q_so, bra_idx, ket_idx):
         """
-        Calculate the 1RDM from a QED-CIS calculation using these notes:
+        calculate c_1^* c_2 <bra|p^{\dagger}q|ket>
 
-
-        Arguments
-        ---------
-        c_vec_n : np.array of CISS coefficients for a given state
+        Argument
+        --------
+        C : numpy array
+            the CIS vector 
+        p : int 
+            spin orbital index for creation operator
+        q : int
+            spin orbital index for annihilation operator
+        bra_idx : int
+            index of bra determinant
+        ket_idx : int
+            index of ket determinant
         """
-
-        # need to reshape c_vec_n so we can make a column and row vector out of it
-        # get some basic quantities first
-        _nmo = self.nmo
-        _ndocc = self.ndocc
-        _nvirt = _nmo - _ndocc
-
-        # total number of states in {|R,0>, |R,1>, |S,0>, |S,1>}
-        _n_ss = len(c_vec_n)
-        # total number of states in {|R,0>, |S,0>} and in {|R,1>, |S,1>}
-        _n_s = int(_n_ss / 2)
-
-        # right now the CI configurations are odered like the following:
-        # |R,0>, |R,1>, |S1,0>, |S1,1>, |S2,0>, |S2,1>, ...
-        # where |S1> denotes the first singly-excited derminant, |S2> the second, etc
-        # so the configurations with 0 photon occupation have even indices and
-        # the configurations with 1 photon occupation have odd indices.
-
-        _pvac_idx = np.arange(0, _n_ss, 2)  # <== indices for C coeffs for |0> states
-        _pone_idx = np.arange(1, _n_ss, 2)  # <== indices for C coeffs for |1> states
-
-        # CIS coefficients spanning the |R,0> and |S,0> states
-        c_n0 = c_vec_n[_pvac_idx]
-        # CIS coefficients spanning the |R,1> and |R,1> states
-        c_n1 = c_vec_n[_pone_idx]
-
-        excitations = []
-        for _i in range(_ndocc):
-            for _a in range(_nvirt):
-                _A = _a + _ndocc
-                excitations.append((_i, _A))     
-
-
-        # make row vectors from CIS coefficients
-        _c_n0r = np.reshape(c_n0, (_n_s, 1))
-        _c_n1r = np.reshape(c_n1, (_n_s, 1))
-
-        # get CIS density matrix for each block 
-        _D0 = np.outer(np.conj(_c_n0r.T), _c_n0r)
-        _D1 = np.outer(np.conj(_c_n1r.T), _c_n1r)
-
-        # _D1_RR : 1-RDM term for the reference states with elements
-        # D_pq =  |c_0^0|^2 <\phi_0,0|p^{\dagger} q|\phi_0,0> + |c_0^1|^2 <\phi_0,1|p^{\dagger} q|\phi_0,1>
-        #      => (|c_0^0|^2+|c_0^1|^2) <\phi_0|p^{\dagger} q|\phi_0>
-        _D1_RR = np.zeros((_nmo, _nmo))
-        for _i in range(_ndocc):
-            _D1_RR[_i, _i] = _D0[0, 0] + _D1[0, 0]
-
-        # _D1_RS : 1-RDM terms between <R,n|p^{\dagger} q|S,n>
-        # only surviving terms are <R,n|i^{\dagger} a|\Phi_i^a,n>
-        # so we will loop through the excitations to get the surviving elements
-        # The 1-RDM terms between <S,n|p^{\dagger} q|R,n> are just the transpose
-        # of this, so we will capture these terms in _D1_RS as well!
-        _D1_RS = np.zeros((_nmo, _nmo))
-        for _I in range(len(excitations)):
-            # offset the ket index by 1
-            # excitation index 0 -> density matrix (row/column) index 1
-            _ket_I = _I + 1
-            _i = excitations[_I][0]
-            _a = excitations[_I][1]
-            _D1_RS[_i, _a] = _D0[0, _ket_I] + _D1[0, _ket_I]
-            _D1_RS[_a, _i] = _D1_RS[_i, _a]  # <== Transpose terms!
-
-        # _D1_SS : 1-RDM terms between <\Phi_i^a,n|p^{dagger} q|\Phi_j^b,n>
-        # which will survive only when i==j for elements 1D_a,b or a==b for elements 1D_ij
-        _D1_SS = np.zeros((_nmo, _nmo))
-        for _I in range(len(excitations)):
-            _ket_I = _I + 1
-            _i = excitations[_I][0]
-            _a = excitations[_I][1]
-
-            for _J in range(len(excitations)):
-                _ket_J = _J + 1
-                _j = excitations[_J][0]
-                _b = excitations[_J][1]
-                _D1_SS[_a, _b] += (_D0[_ket_I, _ket_J] + _D1[_ket_I, _ket_J]) * (
-                    _i == _j
-                )
-                #_D1_SS[_i, _j] -= (_D0[_ket_I, _ket_J] + _D1[_ket_I, _ket_J]) * (
-                #    _a == _b
-                #)
-        _D1 = _D1_RR + _D1_RS + _D1_SS
-        return _D1
-    
-    def calc1RDM_b(self, c_vec_n):
-        """
-        Calculate the 1RDM from a QED-CIS calculation using these notes: 
-        https://chemistry.stackexchange.com/questions/121279/why-are-the-ov-and-vo-blocks-of-the-cis-1rdm-zero
-        Haven't worked through these myself!
-
-        Arguments
-        ---------
-        c_vec_n : np.array of CISS coefficients for a given state
-        """
-
-        # need to reshape c_vec_n so we can make a column and row vector out of it
-        # 𝛾𝑝𝑞=𝛿𝑝𝑞 𝜒(𝑝)+𝑐^𝑝_𝑞(𝜋(𝑝)𝜒(𝑞)+𝜒(𝑝)𝜋(𝑞))+∑_i c_i^p c_q^i 𝜋(𝑝)𝜋(𝑞)−∑_a c_q^a c_a^p 𝜒(𝑝)𝜒(q)
-        # 𝜒(𝑝) and 𝜋(𝑝)= 1 when p belongs to occupied / unoccupied orbitals, respectively
-
-        # get some basic quantities first
-        _nmo = self.nmo
-        _ndocc = self.ndocc
-        _nvirt = _nmo - _ndocc
-
-        # total number of states in {|R,0>, |R,1>, |S,0>, |S,1>}
-        _n_ss = len(c_vec_n)
-        # total number of states in {|R,0>, |S,0>} and in {|R,1>, |S,1>}
-        _n_s = int(_n_ss / 2)
-
-        # right now the CI configurations are odered like the following:
-        # |R,0>, |R,1>, |S1,0>, |S1,1>, |S2,0>, |S2,1>, ...
-        # where |S1> denotes the first singly-excited derminant, |S2> the second, etc
-        # so the configurations with 0 photon occupation have even indices and
-        # the configurations with 1 photon occupation have odd indices.
-
-        _pvac_idx = np.arange(0, _n_ss, 2)  # <== indices for C coeffs for |0> states
-        _pone_idx = np.arange(1, _n_ss, 2)  # <== indices for C coeffs for |1> states
-
-        # CIS coefficients spanning the |R,0> and |S,0> states
-        c_n0 = c_vec_n[_pvac_idx]
-        # CIS coefficients spanning the |R,1> and |R,1> states
-        c_n1 = c_vec_n[_pone_idx]
-
-        # now each vector spans the |R> + {|S>} basis for a given photon state.
-        # for the {|S>}, let's generate a list of the excitations in the order
-        # of the |S> basis
-        _pi = np.zeros(_nmo)
-        _xi = np.zeros(_nmo)
-
-
-        excitations = []
-        C0_ia = np.zeros((_nmo, _nmo))
-        C1_ia = np.zeros((_nmo, _nmo))
-        _idx = 1
-        for _i in range(_ndocc):
-            _xi[_i] = 1
-            for _a in range(_nvirt):
-                _A = _a + _ndocc
-                _pi[_A] = 1
-                excitations.append((_i, _A))
-                C0_ia[_i, _A] = c_n0[_idx]
-                C1_ia[_i, _A] = c_n1[_idx]
-                _idx += 1
-
-
-        _D1 = np.zeros((_nmo, _nmo))
-        for _i in range(_ndocc):
-            _D1[_i, _i] += 1 #c_n0[0] * c_n0[0] + c_n1[0] * c_n1[0]
         
-        for _p in range(_nmo):
-            for _q in range(_nmo):
-                _D1[_p, _q] += c_n0[0] * C0_ia[_p, _q] * _pi[_p] * _xi[_q]
-                _D1[_p, _q] += c_n0[0] * C0_ia[_p, _q] * _xi[_p] * _pi[_q]
-                _D1[_p, _q] += c_n1[0] * C1_ia[_p, _q] * _pi[_p] * _xi[_q]
-                _D1[_p, _q] += c_n1[0] * C1_ia[_p, _q] * _xi[_p] * _pi[_q]
+        n_el_dets = len(self.dets)
 
-                for _i in range(_ndocc):
-                    _D1[_p, _q] += C0_ia[_p, _i] * C0_ia[_i, _q] * _pi[_p] * _pi[_q]
-                    _D1[_p, _q] += C1_ia[_p, _i] * C1_ia[_i, _q] * _pi[_p] * _pi[_q]
+        # get coefficients for the appropriate bra/ket states
+        C0_bra = C[bra_idx]
+        C1_bra = C[bra_idx + n_el_dets]
 
-                for _a in range(_nvirt):
-                    _A = _a + _ndocc
-                    _D1[_p, _q] -= C0_ia[_a, _q] * C0_ia[_p, _a] * _xi[_p] * _xi[_q]
-                    _D1[_p, _q] -= C1_ia[_a, _q] * C1_ia[_p, _a] * _xi[_p] * _xi[_q]
+        C0_ket = C[ket_idx]
+        C1_ket = C[ket_idx + n_el_dets]
+        
+        # compute weight
+        weight = np.conj(C0_bra) * C0_ket + np.conj(C1_bra) * C1_ket
+        elem = 0
+        
+        # get spatial and spin indices from SO index
+        p_map = spin_idx_to_spat_idx_and_spin(p_so)
+        q_map = spin_idx_to_spat_idx_and_spin(q_so)
+        
+        # assign spatial orbital index
+        p = p_map[0]
+        q = q_map[0]
+        
+        # assign spin value
+        p_spin = p_map[1]
+        q_spin = q_map[1]
+        
+        
+        # see if this is an p, q both belong to alpha or both belong to beta
+        if p_spin==1 and q_spin==1:
+            block = "alpha"
+        elif p_spin==-1 and q_spin==-1:
+            block = "beta"
+        # if p and q have different spin, the element is zero
+        else:
+            block = "mixed"
+            
 
-        return _D1
+        # alpha block
+        if block=="alpha":
+            
+            # make copy of the ket determinant
+            ket_copy = self.dets[ket_idx].copy()
+            
+            # assume the element is non-zero
+            nonZero=True
+            # get occupied orbital list
+            a, b = ket_copy.getOrbitalIndexLists()
+            # check to see if q is unoccupied in the alpha list
+            if (q not in a):
+                nonZero = False
+
+            else:
+                # kill q
+                ket_copy.removeAlphaOrbital(q)
+                # update occupied orbital lists
+                a, b = ket_copy.getOrbitalIndexLists()
+
+            # check to see if p is occupied in the alpha list
+            if (p in a):
+                nonZero = False
+
+            else:
+                # create p
+                ket_copy.addAlphaOrbital(p)
+
+            # see if the new ket is the same as the bra
+            numUniqueOrbitals = self.dets[bra_idx].numberOfTotalDiffOrbitals(ket_copy)
+            if numUniqueOrbitals==0 and nonZero:
+                elem += weight 
+                
+            # alpha block
+        elif block=="beta":
+            
+            # make copy of the ket determinant
+            ket_copy = self.dets[ket_idx].copy()
+            
+            # assume the element is non-zero
+            nonZero=True
+            a, b = ket_copy.getOrbitalIndexLists()
+            # check to see if q is unoccupied in the alpha list
+            if (q not in b):
+                nonZero = False
+
+            else:
+                # kill q
+                ket_copy.removeBetaOrbital(q)
+                # get new occupation list
+                a, b = ket_copy.getOrbitalIndexLists()
+
+            # check to see if p is occupied in the alpha list
+            if (p in b):
+                nonZero = False
+
+            else:
+                # create p
+                ket_copy.addBetaOrbital(p)
+
+            numUniqueOrbitals = self.dets[bra_idx].numberOfTotalDiffOrbitals(ket_copy)
+            if numUniqueOrbitals==0 and nonZero:
+                elem += weight
+                
+        else:
+            elem = 0.0
+
+                
+        return elem
