@@ -728,8 +728,7 @@ class PFHamiltonianGenerator:
         self.T_ao = cqed_rhf_dict["1-E KINETIC MATRIX AO"]
         self.V_ao = cqed_rhf_dict["1-E POTENTIAL MATRIX AO"]
         self.q_PF_ao = cqed_rhf_dict["PF 1-E QUADRUPOLE MATRIX AO"]
-        self.d_PF_ao = cqed_rhf_dict["PF 1-E SCALED DIPOLE MATRIX AO"]
-        self.d_cmo = cqed_rhf_dict["PF 1-E DIPOLE MATRIX MO"]
+        self.d_PF_ao = cqed_rhf_dict["PF 1-E SCALED DIPOLE MATRIX AO"]``
         self.d_ao = cqed_rhf_dict["PF 1-E DIPOLE MATRIX AO"]
         wfn = cqed_rhf_dict["PSI4 WFN"]
         self.d_exp = cqed_rhf_dict["EXPECTATION VALUE OF d"]
@@ -770,100 +769,6 @@ class PFHamiltonianGenerator:
         self.docc_list = [i for i in range(self.ndocc)]
 
         return wfn
-
-    def build1MuSO(self):
-        """Will build the 1-electron dipole arrays in the spin orbital
-        basis to be used for computing dipole moment expectation values
-        """
-        _mu_x_spin = np.einsum("uj,vi,uv", self.C, self.C, self.mu_x_ao)
-        _mu_x_spin = np.repeat(_mu_x_spin, 2, axis=0)
-        _mu_x_spin = np.repeat(_mu_x_spin, 2, axis=1)
-
-        _mu_y_spin = np.einsum("uj,vi,uv", self.C, self.C, self.mu_y_ao)
-        _mu_y_spin = np.repeat(_mu_y_spin, 2, axis=0)
-        _mu_y_spin = np.repeat(_mu_y_spin, 2, axis=1)
-
-        _mu_z_spin = np.einsum("uj,vi,uv", self.C, self.C, self.mu_z_ao)
-        _mu_z_spin = np.repeat(_mu_z_spin, 2, axis=0)
-        _mu_z_spin = np.repeat(_mu_z_spin, 2, axis=1)
-
-        _spin_ind = np.arange(_mu_z_spin.shape[0], dtype=int) % 2
-
-        self.mu_x_spin = _mu_x_spin * (_spin_ind.reshape(-1, 1) == _spin_ind)
-        self.mu_y_spin = _mu_y_spin * (_spin_ind.reshape(-1, 1) == _spin_ind)
-        self.mu_z_spin = _mu_z_spin * (_spin_ind.reshape(-1, 1) == _spin_ind)
-
-    def build2MuSO(self):
-        """Build Mu Mu matrix in spin orbital basis to
-        enable the computation of the DSE in the basis of many electron states
-        """
-
-        _ddxx_coul = np.einsum("ik,jl->ijkl", self.mu_x_spin, self.mu_x_spin)
-        _ddxx_exch = np.einsum("il,jk->ijkl", self.mu_x_spin, self.mu_x_spin)
-
-        _ddyy_coul = np.einsum("ik,jl->ijkl", self.mu_y_spin, self.mu_y_spin)
-        _ddyy_exch = np.einsum("il,jk->ijkl", self.mu_y_spin, self.mu_y_spin)
-
-        _ddzz_coul = np.einsum("ik,jl->ijkl", self.mu_z_spin, self.mu_z_spin)
-        _ddzz_exch = np.einsum("il,jk->ijkl", self.mu_z_spin, self.mu_z_spin)
-
-        _ddxy_coul = np.einsum("ik,jl->ijkl", self.mu_x_spin, self.mu_y_spin)
-        _ddxy_exch = np.einsum("il,jk->ijkl", self.mu_x_spin, self.mu_y_spin)
-
-        _ddxz_coul = np.einsum("ik,jl->ijkl", self.mu_x_spin, self.mu_z_spin)
-        _ddxz_exch = np.einsum("il,jk->ijkl", self.mu_x_spin, self.mu_z_spin)
-
-        _ddyz_coul = np.einsum("ik,jl->ijkl", self.mu_y_spin, self.mu_z_spin)
-        _ddyz_exch = np.einsum("il,jk->ijkl", self.mu_y_spin, self.mu_z_spin)
-
-        self.ddxx = _ddxx_coul - _ddxx_exch
-        self.ddyy = _ddyy_coul - _ddyy_exch
-        self.ddzz = _ddzz_coul - _ddzz_exch
-
-        # now the cross terms are scaled by 2
-        self.ddxy = 2 * _ddxy_coul - 2 * _ddxy_exch
-        self.ddxz = 2 * _ddxz_coul - 2 * _ddxz_exch
-        self.ddyz = 2 * _ddyz_coul - 2 * _ddyz_exch
-
-    def build1QSO(self):
-        """Will build the 1-electron quadrupole arrays in the spin orbital
-        basis to be used for DSE
-        """
-        _q_xx_spin = np.einsum("uj,vi,uv", self.C, self.C, self.q_xx_ao)
-        _q_xx_spin = np.repeat(_q_xx_spin, 2, axis=0)
-        _q_xx_spin = np.repeat(_q_xx_spin, 2, axis=1)
-
-        _q_yy_spin = np.einsum("uj,vi,uv", self.C, self.C, self.q_yy_ao)
-        _q_yy_spin = np.repeat(_q_yy_spin, 2, axis=0)
-        _q_yy_spin = np.repeat(_q_yy_spin, 2, axis=1)
-
-        _q_zz_spin = np.einsum("uj,vi,uv", self.C, self.C, self.q_zz_ao)
-        _q_zz_spin = np.repeat(_q_zz_spin, 2, axis=0)
-        _q_zz_spin = np.repeat(_q_zz_spin, 2, axis=1)
-
-        _q_xy_spin = np.einsum("uj,vi,uv", self.C, self.C, self.q_xy_ao)
-        _q_xy_spin = np.repeat(_q_xy_spin, 2, axis=0)
-        _q_xy_spin = np.repeat(_q_xy_spin, 2, axis=1)
-
-        _q_xz_spin = np.einsum("uj,vi,uv", self.C, self.C, self.q_xz_ao)
-        _q_xz_spin = np.repeat(_q_xz_spin, 2, axis=0)
-        _q_xz_spin = np.repeat(_q_xz_spin, 2, axis=1)
-
-        _q_yz_spin = np.einsum("uj,vi,uv", self.C, self.C, self.q_yz_ao)
-        _q_yz_spin = np.repeat(_q_yz_spin, 2, axis=0)
-        _q_yz_spin = np.repeat(_q_yz_spin, 2, axis=1)
-
-        _spin_ind = np.arange(_q_xx_spin.shape[0], dtype=int) % 2
-        
-        # there is a minus sign inherent in the quadrupole terms
-        self.q_xx_spin = -1 * _q_xx_spin * (_spin_ind.reshape(-1, 1) == _spin_ind)
-        self.q_yy_spin = -1 * _q_yy_spin * (_spin_ind.reshape(-1, 1) == _spin_ind)
-        self.q_zz_spin = -1 * _q_zz_spin * (_spin_ind.reshape(-1, 1) == _spin_ind)
-
-        # now the cross terms are scaled by 2
-        self.q_xy_spin = -2 * _q_xy_spin * (_spin_ind.reshape(-1, 1) == _spin_ind)
-        self.q_xz_spin = -2 * _q_xz_spin * (_spin_ind.reshape(-1, 1) == _spin_ind)
-        self.q_yz_spin = -2 * _q_yz_spin * (_spin_ind.reshape(-1, 1) == _spin_ind)
 
     def build1HSO(self):
         """Will build the 1-electron arrays in

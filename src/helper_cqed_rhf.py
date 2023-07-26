@@ -95,9 +95,9 @@ def cqed_rhf(lambda_vector, molecule_string, psi4_options_dict, canonical_basis=
 
     # Integrals required for CQED-RHF
     # Ordinary integrals first
-    V = np.asarray(mints.ao_potential())
-    T = np.asarray(mints.ao_kinetic())
-    I = np.asarray(mints.ao_eri())
+    V_ao = np.asarray(mints.ao_potential())
+    T_ao = np.asarray(mints.ao_kinetic())
+    I_ao = np.asarray(mints.ao_eri())
 
     # Extra terms for Pauli-Fierz Hamiltonian
     # electronic dipole integrals in AO basis
@@ -106,9 +106,9 @@ def cqed_rhf(lambda_vector, molecule_string, psi4_options_dict, canonical_basis=
     mu_ao_z = np.asarray(mints.ao_dipole()[2])
 
     # \lambda \cdot \mu_el (see within the sum of line 3 of Eq. (9) in [McTague:2021:ChemRxiv])
-    l_dot_mu_el = lambda_vector[0] * mu_ao_x
-    l_dot_mu_el += lambda_vector[1] * mu_ao_y
-    l_dot_mu_el += lambda_vector[2] * mu_ao_z
+    d_el_ao = lambda_vector[0] * mu_ao_x
+    d_el_ao += lambda_vector[1] * mu_ao_y
+    d_el_ao += lambda_vector[2] * mu_ao_z
 
     # compute electronic dipole expectation value with
     # canonincal RHF density
@@ -127,7 +127,7 @@ def cqed_rhf(lambda_vector, molecule_string, psi4_options_dict, canonical_basis=
     # We need to carry around the electric field dotted into the nuclear dipole moment
 
     # \lambda_vecto \cdot < \mu > where <\mu> contains ONLY electronic contributions
-    l_dot_mu_exp = np.dot(lambda_vector, mu_exp_el)
+    d_nuc = np.dot(lambda_vector, mu_nuc)
 
     # quadrupole arrays
     Q_ao_xx = np.asarray(mints.ao_quadrupole()[0])
@@ -138,175 +138,32 @@ def cqed_rhf(lambda_vector, molecule_string, psi4_options_dict, canonical_basis=
     Q_ao_zz = np.asarray(mints.ao_quadrupole()[5])
 
     # Pauli-Fierz 1-e quadrupole terms, Line 2 of Eq. (9) in [McTague:2021:ChemRxiv]
-    Q_PF = -0.5 * lambda_vector[0] * lambda_vector[0] * Q_ao_xx
-    Q_PF -= 0.5 * lambda_vector[1] * lambda_vector[1] * Q_ao_yy
-    Q_PF -= 0.5 * lambda_vector[2] * lambda_vector[2] * Q_ao_zz
+    Q_ao = -0.5 * lambda_vector[0] * lambda_vector[0] * Q_ao_xx
+    Q_ao -= 0.5 * lambda_vector[1] * lambda_vector[1] * Q_ao_yy
+    Q_ao -= 0.5 * lambda_vector[2] * lambda_vector[2] * Q_ao_zz
 
     # accounting for the fact that Q_ij = Q_ji
     # by weighting Q_ij x 2 which cancels factor of 1/2
-    Q_PF -= lambda_vector[0] * lambda_vector[1] * Q_ao_xy
-    Q_PF -= lambda_vector[0] * lambda_vector[2] * Q_ao_xz
-    Q_PF -= lambda_vector[1] * lambda_vector[2] * Q_ao_yz
+    Q_ao -= lambda_vector[0] * lambda_vector[1] * Q_ao_xy
+    Q_ao -= lambda_vector[0] * lambda_vector[2] * Q_ao_xz
+    Q_ao -= lambda_vector[1] * lambda_vector[2] * Q_ao_yz
 
     # Pauli-Fierz 1-e dipole terms scaled <\mu>_e
-    d_PF = -1 * l_dot_mu_exp * l_dot_mu_el
+    d_nuc_d_el_ao = d_nuc * d_el_ao
 
     # Pauli-Fierz (\lambda \cdot <\mu>_e ) ^ 2
-    d_c = 0.5 * l_dot_mu_exp**2
+    d_nuc_sq = 0.5 * d_nuc ** 2
 
-    # ordinary H_core
-    H_0 = T + V
-
-    # Add Pauli-Fierz terms to H_core
-    # Eq. (11) in [McTague:2021:ChemRxiv]
-    H = H_0 + Q_PF
-
-    # Overlap for DIIS
-    S = mints.ao_overlap()
-    # Orthogonalizer A = S^(-1/2) using Psi4's matrix power.
-    A = mints.ao_overlap()
-    A.power(-0.5, 1.0e-16)
-    A = np.asarray(A)
-
-    print("\nStart SCF iterations:\n")
-    t = time.time()
-    E = 0.0
-    Enuc = mol.nuclear_repulsion_energy()
-    Eold = 0.0
-    E_1el_crhf = np.einsum("pq,pq->", H_0 + H_0, D)
-    E_1el = np.einsum("pq,pq->", H + H, D)
-    print("Canonical RHF One-electron energy = %4.16f" % E_1el_crhf)
-    print("CQED-RHF One-electron energy      = %4.16f" % E_1el)
-    print("Nuclear repulsion energy          = %4.16f" % Enuc)
-    print("Dipole energy                     = %4.16f" % d_c)
-
-    # Set convergence criteria from psi4_options_dict
-    if "e_convergence" in psi4_options_dict:
-        E_conv = psi4_options_dict["e_convergence"]
-    else:
-        E_conv = 1.0e-7
-    if "d_convergence" in psi4_options_dict:
-        D_conv = psi4_options_dict["d_convergence"]
-    else:
-        D_conv = 1.0e-5
-
-    t = time.time()
-    global dimSubspace
-    dimSubspace = 8
-    error_list = Subspace()
-    fock_list = Subspace()
-    # maxiter
-    maxiter = 500
-    for SCF_ITER in range(1, maxiter + 1):
-
-        # Build fock matrix: [Szabo:1996] Eqn. 3.154, pp. 141
-        J = np.einsum("pqrs,rs->pq", I, D)
-        K = np.einsum("prqs,rs->pq", I, D)
-
-        # Pauli-Fierz 2-e dipole-dipole terms, line 2 of Eq. (12) in [McTague:2021:ChemRxiv]
-        # M = np.einsum("pq,rs,rs->pq", l_dot_mu_el, l_dot_mu_el, D)
-        N = np.einsum("pr,qs,rs->pq", l_dot_mu_el, l_dot_mu_el, D)
-
-        # Build fock matrix: [Szabo:1996] Eqn. 3.154, pp. 141
-        # plus Pauli-Fierz terms Eq. (12) in [McTague:2021:ChemRxiv]
-        F = H + 2 * J - K - N
-        # save current Fock matrix into memory
-        fock_list.append(F)
-        diis_e = np.einsum("ij,jk,kl->il", F, D, S) - np.einsum("ij,jk,kl->il", S, D, F)
-        # turn diis_e into column vector and then save to memory
-        error_vector = diis_e.reshape(diis_e.shape[0] * diis_e.shape[0], 1)
-        error_list.append(error_vector)
-
-        diis_e = A.dot(diis_e).dot(A)
-        dRMS = np.mean(diis_e**2) ** 0.5
-
-        # SCF energy and update: [Szabo:1996], Eqn. 3.184, pp. 150
-        # Pauli-Fierz terms Eq. 13 of [McTague:2021:ChemRxiv]
-        SCF_E = np.einsum("pq,pq->", F + H, D) + Enuc
-
-        print(
-            "SCF Iteration %3d: Energy = %4.16f   dE = % 1.5E   dRMS = %1.5E"
-            % (SCF_ITER, SCF_E, (SCF_E - Eold), dRMS)
-        )
-        if (abs(SCF_E - Eold) < E_conv) and (dRMS < D_conv):
-            break
-
-        Eold = SCF_E
-
-        if SCF_ITER >= 2:
-            diis_coeff = b_coefficient(error_list)
-            F = np.zeros_like(D)
-            for i in range(len(fock_list)):
-                F += diis_coeff[i] * fock_list[i]
-
-        # Diagonalize Fock matrix: [Szabo:1996] pp. 145
-        Fp = A.dot(F).dot(A)  # Eqn. 3.177
-        e, C2 = np.linalg.eigh(Fp)  # Solving Eqn. 1.178
-
-        # if optional flag to use canonical basis is set to True, break before updating
-        # any scf quantities
-        if canonical_basis:
-            break
-
-        C = A.dot(C2)  # Back transform, Eqn. 3.174
-        Cocc = C[:, :ndocc]
-        D = np.einsum("pi,qi->pq", Cocc, Cocc)  # [Szabo:1996] Eqn. 3.145, pp. 139
-
-        # update electronic dipole expectation value
-        mu_exp_x = np.einsum("pq,pq->", 2 * mu_ao_x, D)
-        mu_exp_y = np.einsum("pq,pq->", 2 * mu_ao_y, D)
-        mu_exp_z = np.einsum("pq,pq->", 2 * mu_ao_z, D)
-
-        # get electronic dipole expectation value
-        mu_exp_el = np.array([mu_exp_x, mu_exp_y, mu_exp_z])
-
-        # dot field vector into <\mu>_e
-        l_dot_mu_exp = np.dot(lambda_vector, mu_exp_el)
-
-        # Pauli-Fierz (\lambda \cdot <\mu>_e ) ^ 2
-        d_c = 0.5 * l_dot_mu_exp**2
-
-        d_PF = -1 * l_dot_mu_exp * l_dot_mu_el
-
-        # update Core Hamiltonian
-        H = H_0 + Q_PF
-
-        if SCF_ITER == maxiter:
-            psi4.core.clean()
-            raise Exception("Maximum number of SCF cycles exceeded.")
-
-    print("Total time for SCF iterations: %.3f seconds \n" % (time.time() - t))
-    print("QED-RHF   energy: %.8f hartree" % SCF_E)
-    print("Psi4  SCF energy: %.8f hartree" % psi4_rhf_energy)
-
-    # compute various energetic contributions
-    SCF_1E = np.einsum("pq,pq->", 2 * H_0, D)
-    SCF_2E_J = np.einsum("pq,pq->", 2 * J, D)
-    SCF_2E_K = np.einsum("pq,pq->", -1 * K, D)
-    PF_1E_Q = np.einsum("pq,pq->", 2 * Q_PF, D)
-    PF_2E_N = np.einsum("pq,pq->", -1 * N, D)
-
-    # sum these together and see if equal to SCF_E - Enuc - d_c
-    PF_E_el = SCF_1E + SCF_2E_J + SCF_2E_K + PF_1E_Q + PF_2E_N
-    # does this agree with the final SCF energy when you subtract off nuclear contribut
-    assert np.isclose(SCF_E - Enuc, PF_E_el, 1e-9)
-
-    # transform \lambda \cdot \mu to CMO basis
-    l_dot_mu_cmo = np.dot(C.T, l_dot_mu_el).dot(C)
-
+    
     cqed_rhf_dict = {
         "RHF ENERGY": psi4_rhf_energy,
-        "CQED-RHF ENERGY": SCF_E,
-        "CQED-RHF ONE-ENERGY": SCF_1E,
         "CQED-RHF C": C,
         "CQED-RHF DENSITY MATRIX": D,
         "CQED-RHF EPS": e,
         "PSI4 WFN": wfn,
         "CQED-RHF ELECTRONIC DIPOLE MOMENT": mu_exp_el,
-        "EXPECTATION VALUE OF d": l_dot_mu_exp,
         "NUCLEAR DIPOLE MOMENT": mu_nuc,
         "CQED-RHF DIPOLE MOMENT": mu_exp_el + mu_nuc,
-        "DIPOLE ENERGY (1/2 (lambda cdot <mu>_e)^2)": d_c,
         "RHF DIPOLE MOMENT": rhf_dipole_moment,
         "NUCLEAR REPULSION ENERGY": Enuc,
         "DIPOLE AO X": mu_ao_x,
@@ -319,11 +176,11 @@ def cqed_rhf(lambda_vector, molecule_string, psi4_options_dict, canonical_basis=
         "QUADRUPOLE AO XY": Q_ao_xy,
         "QUADRUPOLE AO XZ": Q_ao_xz,
         "QUADRUPOLE AO YZ": Q_ao_zz,
-        "PF 1-E SCALED DIPOLE MATRIX AO": d_PF,
-        "PF 1-E DIPOLE MATRIX AO": l_dot_mu_el,
-        "PF 1-E DIPOLE MATRIX MO": l_dot_mu_cmo,
-        "PF 1-E QUADRUPOLE MATRIX AO": Q_PF,
-        "1-E KINETIC MATRIX AO": T,
-        "1-E POTENTIAL MATRIX AO": V,
+        "NUCLEAR DIPOLE ENERGY (1/2 (lambda cdot mu_n)^2)": d_nuc_sq,
+        "PF 1-E DIPOLE MATRIX AO": d_el_ao,
+        "PF 1-E QUADRUPOLE MATRIX AO": Q_ao,
+        "PF 1-E SCALED DIPOLE MATRIX" : d_nuc_d_el_ao
+        "1-E KINETIC MATRIX AO": T_ao,
+        "1-E POTENTIAL MATRIX AO": V_ao,
     }
     return cqed_rhf_dict
