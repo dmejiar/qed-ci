@@ -976,7 +976,7 @@ class PFHamiltonianGenerator:
         _compDim = (self.N_p + 1) * _numDets
 
         # PF Hamiltonian
-        self.H_PF = np.zeros((_compDim, _compDim)))
+        self.H_PF = np.zeros((_compDim, _compDim))
 
         for i in range(_numDets):
             for j in range(i + 1):
