@@ -17,32 +17,8 @@ __date__ = "2021-08-19"
 # ==> Import Psi4, NumPy, & SciPy <==
 import psi4
 import numpy as np
-import time
 
-
-def b_coefficient(error_vectors):
-    b_mat = np.zeros((len(error_vectors) + 1, len(error_vectors) + 1))
-    b_mat[-1, :] = -1
-    b_mat[:, -1] = -1
-    b_mat[-1, -1] = 0
-    rhs = np.zeros((len(error_vectors) + 1, 1))
-    rhs[-1, -1] = -1
-    for i in range(len(error_vectors)):
-        for j in range(i + 1):
-            b_mat[i, j] = np.dot(error_vectors[i].transpose(), error_vectors[j])
-            b_mat[j, i] = b_mat[i, j]
-    *diis_coeff, _ = np.linalg.solve(b_mat, rhs)
-    return diis_coeff
-
-
-class Subspace(list):
-    def append(self, item):
-        list.append(self, item)
-        if len(self) > dimSubspace:
-            del self[0]
-
-
-def cqed_rhf(lambda_vector, molecule_string, psi4_options_dict, canonical_basis=False):
+def cqed_rhf(lambda_vector, molecule_string, psi4_options_dict):
     """Computes the QED-RHF energy and density
     Arguments
     ---------
@@ -97,7 +73,6 @@ def cqed_rhf(lambda_vector, molecule_string, psi4_options_dict, canonical_basis=
     # Ordinary integrals first
     V_ao = np.asarray(mints.ao_potential())
     T_ao = np.asarray(mints.ao_kinetic())
-    I_ao = np.asarray(mints.ao_eri())
 
     # Extra terms for Pauli-Fierz Hamiltonian
     # electronic dipole integrals in AO basis
@@ -176,11 +151,11 @@ def cqed_rhf(lambda_vector, molecule_string, psi4_options_dict, canonical_basis=
         "QUADRUPOLE AO XY": Q_ao_xy,
         "QUADRUPOLE AO XZ": Q_ao_xz,
         "QUADRUPOLE AO YZ": Q_ao_zz,
-        "NUCLEAR DIPOLE ENERGY (1/2 (lambda cdot mu_n)^2)": d_nuc_sq,
+        "NUCLEAR DIPOLE ENERGY": d_nuc_sq,
         "PF 1-E DIPOLE MATRIX AO": d_el_ao,
         "PF 1-E QUADRUPOLE MATRIX AO": Q_ao,
-        "PF 1-E SCALED DIPOLE MATRIX" : d_nuc_d_el_ao
-        "1-E KINETIC MATRIX AO": T_ao,
-        "1-E POTENTIAL MATRIX AO": V_ao,
+        "PF 1-E SCALED DIPOLE MATRIX" : d_nuc_d_el_ao,
+        "1-E KINETIC MATRIX AO" : T_ao,
+        "1-E POTENTIAL MATRIX AO": V_ao
     }
     return cqed_rhf_dict
