@@ -104,6 +104,9 @@ def cqed_rhf(lambda_vector, molecule_string, psi4_options_dict):
     # \lambda_vecto \cdot < \mu > where <\mu> contains ONLY electronic contributions
     d_nuc = np.dot(lambda_vector, mu_nuc)
 
+    # nuclear repulsion energy
+    Enuc = mol.nuclear_repulsion_energy()
+
     # quadrupole arrays
     Q_ao_xx = np.asarray(mints.ao_quadrupole()[0])
     Q_ao_xy = np.asarray(mints.ao_quadrupole()[1])
@@ -132,9 +135,9 @@ def cqed_rhf(lambda_vector, molecule_string, psi4_options_dict):
     
     cqed_rhf_dict = {
         "RHF ENERGY": psi4_rhf_energy,
+        "CQED-RHF ENERGY" : psi4_rhf_energy,
         "CQED-RHF C": C,
         "CQED-RHF DENSITY MATRIX": D,
-        "CQED-RHF EPS": e,
         "PSI4 WFN": wfn,
         "CQED-RHF ELECTRONIC DIPOLE MOMENT": mu_exp_el,
         "NUCLEAR DIPOLE MOMENT": mu_nuc,
@@ -152,6 +155,7 @@ def cqed_rhf(lambda_vector, molecule_string, psi4_options_dict):
         "QUADRUPOLE AO XZ": Q_ao_xz,
         "QUADRUPOLE AO YZ": Q_ao_zz,
         "NUCLEAR DIPOLE ENERGY": d_nuc_sq,
+        "PF NUCLEAR DIPOLE TERM" : d_nuc,
         "PF 1-E DIPOLE MATRIX AO": d_el_ao,
         "PF 1-E QUADRUPOLE MATRIX AO": Q_ao,
         "PF 1-E SCALED DIPOLE MATRIX" : d_nuc_d_el_ao,

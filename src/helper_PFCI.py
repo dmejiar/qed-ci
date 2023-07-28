@@ -714,7 +714,7 @@ class PFHamiltonianGenerator:
         # grab quantities from cqed_rhf_dict
         self.rhf_reference_energy = cqed_rhf_dict["RHF ENERGY"]
         self.cqed_reference_energy = cqed_rhf_dict["CQED-RHF ENERGY"]
-        self.cqed_one_energy = cqed_rhf_dict["CQED-RHF ONE-ENERGY"]
+        #self.cqed_one_energy = cqed_rhf_dict["CQED-RHF ONE-ENERGY"]
         self.C = cqed_rhf_dict["CQED-RHF C"]
         self.T_ao = cqed_rhf_dict["1-E KINETIC MATRIX AO"]
         self.V_ao = cqed_rhf_dict["1-E POTENTIAL MATRIX AO"]
@@ -723,6 +723,7 @@ class PFHamiltonianGenerator:
         self.d_nuc_d_el_ao = cqed_rhf_dict["PF 1-E SCALED DIPOLE MATRIX"]
         wfn = cqed_rhf_dict["PSI4 WFN"]
         self.d_nuc_sq = cqed_rhf_dict["NUCLEAR DIPOLE ENERGY"]
+        self.d_nuc = cqed_rhf_dict["PF NUCLEAR DIPOLE TERM"]
         self.Enuc = cqed_rhf_dict["NUCLEAR REPULSION ENERGY"]
         self.mu_el = cqed_rhf_dict["CQED-RHF ELECTRONIC DIPOLE MOMENT"]
         self.mu_nuc = cqed_rhf_dict["NUCLEAR DIPOLE MOMENT"]
@@ -800,8 +801,7 @@ class PFHamiltonianGenerator:
         spin_ind = np.arange(_g.shape[0], dtype=int) % 2
         # product of spatial and spin parts
         self.g_so = _g * (spin_ind.reshape(-1, 1) == spin_ind)
-        if self.ignore_coupling == True:
-            self.g_so *= 0
+
 
     def buildConstantMatrices(self, ci_level):
         """
@@ -820,14 +820,9 @@ class PFHamiltonianGenerator:
             _I = np.identity(self.CISnumDets)
 
         self.Enuc_so = self.Enuc * _I
-        self.G_exp_so = np.sqrt(self.omega / 2) * self.d_exp * _I
+        self.G_nuc_so = -np.sqrt(self.omega / 2) * self.d_nuc * _I
         self.Omega_so = self.omega * _I
-        self.dc_so = self.dc * _I
-
-        if self.ignore_coupling == True:
-            self.G_exp_so *= 0
-            self.Omega_so *= 0
-            self.dc_so *= 0
+        self.dnuc_sq_so = self.d_nuc_sq * _I
 
     def generateCISTuple(self):
         """
@@ -977,37 +972,94 @@ class PFHamiltonianGenerator:
 
         self.Gmatrix = np.zeros((_numDets, _numDets))
 
-        self.H_PF = np.zeros((2 * _numDets, 2 * _numDets))
-        # one-electron version of Hamiltonian
-        self.H_1E = np.zeros((2 * _numDets, 2 * _numDets))
+        # dimension of composite dimension
+        _compDim = (self.N_p + 1) * _numDets
+
+        # PF Hamiltonian
+        self.H_PF = np.zeros((_compDim, _compDim)))
 
         for i in range(_numDets):
             for j in range(i + 1):
                 self.ApDmatrix[i, j] = self.calcApDMatrixElement(_dets[i], _dets[j])
-                self.apdmatrix[i, j] = self.calcApDMatrixElement(
-                    _dets[i], _dets[j], OneEpTwoE=False
-                )
                 self.ApDmatrix[j, i] = self.ApDmatrix[i, j]
-                self.apdmatrix[j, i] = self.apdmatrix[i, j]
                 self.Gmatrix[i, j] = self.calcGMatrixElement(_dets[i], _dets[j])
                 self.Gmatrix[j, i] = self.Gmatrix[i, j]
 
         # full hamiltonian
-        self.H_PF[:_numDets, :_numDets] = self.ApDmatrix + self.Enuc_so + self.dc_so
-        # 1-e piece
-        self.H_1E[:_numDets, :_numDets] = self.apdmatrix + self.Enuc_so + self.dc_so
+        if self.N_p == 0:
+            self.H_PF[:_numDets, :_numDets] = self.ApDmatrix + self.Enuc_so + self.dnuc_sq_so
 
-        # full Hamiltonian
-        self.H_PF[_numDets:, _numDets:] = (
-            self.ApDmatrix + self.Enuc_so + self.dc_so + self.Omega_so
-        )
 
-        # 1-e piece
-        self.H_1E[_numDets:, _numDets:] = (
-            self.apdmatrix + self.Enuc_so + self.dc_so + self.Omega_so
-        )
-        self.H_PF[_numDets:, :_numDets] = self.Gmatrix + self.G_exp_so
-        self.H_PF[:_numDets, _numDets:] = self.Gmatrix + self.G_exp_so
+        elif self.N_p == 1:
+            # full hamiltonian
+            self.H_PF[:_numDets, :_numDets] = self.ApDmatrix + self.Enuc_so + self.dnuc_sq_so
+
+            # full Hamiltonian
+            self.H_PF[_numDets:, _numDets:] = (
+                self.ApDmatrix + self.Enuc_so + self.dnuc_sq_so + self.Omega_so
+            )
+
+            self.H_PF[_numDets:, :_numDets] = self.Gmatrix + self.G_nuc_so
+            self.H_PF[:_numDets, _numDets:] = self.Gmatrix + self.G_nuc_so
+
+        else:
+
+            for i in range(self.N_p + 1):
+                bra_s = i * _numDets
+                bra_e = (i + 1) * _numDets
+                ket_s = bra_s
+                ket_e = bra_e
+                self.H_PF[bra_s:bra_e, ket_s:ket_e] = (
+                    self.ApDmatrix + self.Enuc_so + self.dnuc_sq_so + i * self.Omega_so
+                )
+
+            for i in range(self.N_p + 1):
+                if i == 0:
+                    j = i + 1
+                    bra_s = i * _numDets
+                    bra_e = (i + 1) * _numDets
+                    ket_s = j * _numDets
+                    ket_e = (j + 1) * _numDets
+
+                    self.H_PF[bra_s:bra_e, ket_s:ket_e] = self.Gmatrix * np.sqrt(
+                        j
+                    ) + self.G_nuc_so * np.sqrt(j)
+
+                elif i == (self.N_p):
+                    j = i - 1  # <== equivalent to i = j + 1
+                    bra_s = i * _numDets
+                    bra_e = (i + 1) * _numDets
+                    ket_s = j * _numDets
+                    ket_e = (j + 1) * _numDets
+
+                    # the <i|\hat{b}^{\dagger}|j> -> \sqrt{j+1} <i|j+1> term survives
+                    self.H_PF[bra_s:bra_e, ket_s:ket_e] = self.Gmatrix * np.sqrt(
+                        j + 1
+                    ) + self.G_nuc_so * np.sqrt(j + 1)
+
+                else:
+                    j = i + 1  # <== equivalent to i = j - 1
+                    bra_s = i * _numDets
+                    bra_e = (i + 1) * _numDets
+                    ket_s = j * _numDets
+                    ket_e = (j + 1) * _numDets
+
+                    # the <i|\hat{b}|j> -> \sqrt{j} <i|j-1> term survives
+                    self.H_PF[bra_s:bra_e, ket_s:ket_e] = self.Gmatrix * np.sqrt(
+                        j
+                    ) + self.G_nuc_so * np.sqrt(j)
+
+                    j = i - 1  # <== equivalent to i = j + 1
+                    bra_s = i * _numDets
+                    bra_e = (i + 1) * _numDets
+                    ket_s = j * _numDets
+                    ket_e = (j + 1) * _numDets
+
+                    # the <i|\hat{b}^{\dagger}|j> -> \sqrt{j+1} <i|j+1> term survives
+                    self.H_PF[bra_s:bra_e, ket_s:ket_e] = self.Gmatrix * np.sqrt(
+                        j + 1
+                    ) + self.G_nuc_so * np.sqrt(j + 1)
+
 
     def calcApDMatrixElement(self, det1, det2, OneEpTwoE=True):
         """
