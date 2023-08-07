@@ -194,4 +194,46 @@ def test_mghp_qed_cis_with_cavity_canonical_mo():
     assert np.isclose(actual_lp, expected_mghp_lp_e)
     assert np.isclose(actual_up, expected_mghp_up_e)
 
+def test_ch2o_qed_cas_88_no_cavity():
+
+    options_dict = {
+        "basis": "cc-pVDZ",
+        "scf_type": "pk",
+        "e_convergence": 1e-10,
+        "d_convergence": 1e-10,
+    }
+
+    cavity_dict = {
+        'omega_value' : 0.0,
+        'lambda_vector' : np.array([0, 0, 0]),
+        'ci_level' : 'cas',
+        'number_of_photons' : 0,
+        'nact_els' : 8,
+        'nact_orbs' : 8,
+        'full_diagonalization' : True
+    }
+
+    # molecule string for H2O
+    ch2o_string = """
+    0 1
+    O
+    C             1    1.2448979591836735
+    H             2    1.120350      1  122.478805
+    H             2    1.120350      1  122.478805      3  180.000000
+    symmetry c1
+    """
+
+    test_pf = PFHamiltonianGenerator(
+        ch2o_string,
+        options_dict,
+        cavity_dict
+    )
+    
+    # expected eigenvalues from canonical_mo_option commit 36377939e45c5bcf9d1b6c8d2ecdd6dc29e8ecdd
+    expected_e = np.array([-113.9023426,  -113.75614494, -113.7441367,  -113.69468587, -113.58155048])
+
+    actual_e = test_pf.CIeigs[:5] # <== ground state
+
+    assert np.allclose(expected_e, actual_e)
+
 
